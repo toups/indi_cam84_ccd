@@ -2,17 +2,14 @@
 #define CAM84CCD_H
 
 /*
+   Code derived from:
+
    INDI Developers Manual
    Tutorial #3
 
    "Simple CCD Driver"
 
-   We develop a simple CCD driver.
-
-   Refer to README, which contains instruction on how to build this driver, and use it
-   with an INDI-compatible client.
-
-*/
+ */
 
 /** \file simpleccd.h
     \brief Construct a basic INDI CCD device that simulates exposure & temperature settings. It also generates a random pattern and uploads it as a FITS file.
@@ -23,8 +20,6 @@
     refer to the INDI Generic CCD driver template in INDI SVN (under 3rdparty).
 */
 
-
-#include <indiccd.h>
 
 class Cam84CCD : public INDI::CCD
 {
@@ -50,7 +45,7 @@ protected:
     void TimerHit();
 
 private:
-    // Utility functions
+   // Utility functions
     float CalcTimeLeft();
     void  setupParams();
     void  grabImage();
@@ -66,8 +61,8 @@ private:
     INumber OffsetN[1];
     INumberVectorProperty OffsetNP;
 
-    INumber BaudrateN[1];
-    INumberVectorProperty BaudrateNP;
+    INumber BaudrateDivisorN[1];
+    INumberVectorProperty BaudrateDivisorNP;
 
     INumber LibftditimerAN[1];
     INumberVectorProperty LibftditimerANP;
@@ -80,6 +75,9 @@ private:
 
     INumber LibftdilatencyBN[1];
     INumberVectorProperty LibftdilatencyBNP;
+	
+	ISwitch ContinuousADToggle[1];
+	ISwitchVectorProperty ContinuousADToggleP;
 
     float ExposureRequest;
     float TemperatureRequest;

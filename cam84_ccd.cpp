@@ -1,4 +1,5 @@
 /*
+   Developed using
    INDI Developers Manual
    Tutorial #3
 
@@ -23,6 +24,8 @@
 #include <sys/time.h>
 #include <memory>
 #include <math.h>
+#include <indiccd.h>
+#include <unistd.h>
 #include "cam84_ccd.h"
 #include "libcam84.h"
 
@@ -35,6 +38,11 @@ const float TEMP_THRESHOLD = .25;		/* Differential temperature threshold (C)*/
 #define currentCCDTemperature   TemperatureN[0].value
 
 std::unique_ptr<Cam84CCD> simpleCCD(new Cam84CCD());
+
+//const char * getDeviceName()  //FIX will not link
+//{
+//    return("cam84_ccd");
+//}
 
 void ISGetProperties(const char *dev)
 {
@@ -106,13 +114,30 @@ bool Cam84CCD::ISNewNumber(const char *dev, const char *name,
             return true;
         }
 
-        if (!strcmp(name, BaudrateNP.name))
+        if (!strcmp(name, BaudrateDivisorNP.name))
         {
-            IUUpdateNumber(&BaudrateNP, values, names, n);
-            BaudrateNP.s = IPS_OK;
-            IDSetNumber(&BaudrateNP, NULL);
-            cameraSetBaudrate(BaudrateN[0].value);
-            IDMessage(getDeviceName(), "Cam84 set baudrate = %d",(int) BaudrateN[0].value);
+            IUUpdateNumber(&BaudrateDivisorNP, values, names, n);
+            BaudrateDivisorNP.s = IPS_OK;
+            IDSetNumber(&BaudrateDivisorNP, NULL);
+            cameraSetBaudrateDivisor(BaudrateDivisorN[0].value);
+            int theDivisor = BaudrateDivisorN[0].value;
+            int theBaudRatekbps;
+            if (theDivisor < 2)
+            {
+                if (theDivisor <= 0)
+                {
+                    theBaudRatekbps = 3000;
+                }
+                else
+                {
+                    theBaudRatekbps = 2000;
+                }
+            }
+            else
+            {
+                theBaudRatekbps = 3000 / theDivisor;
+            }
+            IDMessage(getDeviceName(), "Cam84 set baudrate = %d kbps", theBaudRatekbps ) ;
             return true;
         }
 
@@ -138,8 +163,8 @@ bool Cam84CCD::ISNewNumber(const char *dev, const char *name,
             IDMessage(getDeviceName(), "Cam84 set libftdi timerA = %d",(int) LibftditimerAN[0].value);
             IDMessage(getDeviceName(), "Cam84 set libftdi latencyA = %d",(int) LibftdilatencyAN[0].value);
             IDMessage(getDeviceName(), "Cam84 set libftdi timerB = %d",(int) LibftditimerBN[0].value);
-            IDMessage(getDeviceName(), "Cam84 set libftdi latencyB = %d",(int) LibftdilatencyBN[0].value);            
-			return true;
+            IDMessage(getDeviceName(), "Cam84 set libftdi latencyB = %d",(int) LibftdilatencyBN[0].value);
+            return true;
         }
         if (!strcmp(name, LibftditimerBNP.name))
         {
@@ -163,9 +188,10 @@ bool Cam84CCD::ISNewNumber(const char *dev, const char *name,
             IDMessage(getDeviceName(), "Cam84 set libftdi timerA = %d",(int) LibftditimerAN[0].value);
             IDMessage(getDeviceName(), "Cam84 set libftdi latencyA = %d",(int) LibftdilatencyAN[0].value);
             IDMessage(getDeviceName(), "Cam84 set libftdi timerB = %d",(int) LibftditimerBN[0].value);
-            IDMessage(getDeviceName(), "Cam84 set libftdi latencyB = %d",(int) LibftdilatencyBN[0].value);            
-			return true;
+            IDMessage(getDeviceName(), "Cam84 set libftdi latencyB = %d",(int) LibftdilatencyBN[0].value);
+            return true;
         }
+
 
     }
 
@@ -180,6 +206,19 @@ bool Cam84CCD::ISNewNumber(const char *dev, const char *name,
 bool Cam84CCD::ISNewSwitch (const char *dev, const char *name,
                           ISState *states, char *names[], int n)
 {
+    if (!strcmp(dev, getDeviceName()))
+    {
+
+        if (!strcmp(name, ContinuousADToggleP.name))
+        {
+            IUUpdateSwitch(&ContinuousADToggleP, states, names, n);
+            bool theToggle = (ContinuousADToggle[0].s==ISS_ON);
+            cameraSetContinuousADToggle(theToggle);
+            IDMessage(getDeviceName(), "Cam84 set ContinuousADToggle = %d\n", theToggle);
+            return true;
+        }
+
+    }
     return INDI::CCD::ISNewSwitch (dev, name, states, names,  n);
 }
 
@@ -232,9 +271,9 @@ bool Cam84CCD::initProperties()
     /*const short minGain = 0;
     const short maxGain = 63;
     const short minOffset = -127;
-    const short maxOffset = 127;
-    const short minBaudrate = 80;
-    const short maxBaudrate = 240;*/
+    const short maxOffset = 127; */
+    const short minBaudrateDivisor = 0;
+    const short maxBaudrateDivisor = 5;
 
     /* Add Gain number property (gs) */
     IUFillNumber(GainN, "GAIN", "Gain", "%g", 0, 63, 1, CAM84_GAIN);
@@ -247,12 +286,12 @@ bool Cam84CCD::initProperties()
                        "Offset", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 
     /* Add Baudrate number property (gs) */
-    IUFillNumber(BaudrateN, "BAUDRATE", "Baudrate", "%g", 10, 150, 10, CAM84_BAUDRATE);
-    IUFillNumberVector(&BaudrateNP, BaudrateN, 1, getDeviceName(),"BAUDRATE",
-                       "Baudrate", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
+    IUFillNumber(BaudrateDivisorN, "BAUDRATE_DIVISOR", "Baudrate Divisor", "%g", minBaudrateDivisor, maxBaudrateDivisor, 1, CAM84_BAUDRATE_DIVISOR);
+    IUFillNumberVector(&BaudrateDivisorNP, BaudrateDivisorN, 1, getDeviceName(),"BAUDRATE_DIVISOR",
+                       "BaudrateDivsor", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 
     /* Add Latency number property (gs) */
-    IUFillNumber(LibftdilatencyAN, "LATENCYA", "LatencyA", "%g", 1, 50, 1, CAM84_LATENCYA);
+    IUFillNumber(LibftdilatencyAN, "LATENCYA", "LatencyA", "%g", 0, 255, 1, CAM84_LATENCYA);
     IUFillNumberVector(&LibftdilatencyANP, LibftdilatencyAN, 1, getDeviceName(),"LATENCYA",
                        "LatencyA", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 
@@ -262,7 +301,7 @@ bool Cam84CCD::initProperties()
                        "TimerA", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 
     /* Add Latency number property (gs) */
-    IUFillNumber(LibftdilatencyBN, "LATENCYB", "LatencyB", "%g", 1, 50, 1, CAM84_LATENCYB);
+    IUFillNumber(LibftdilatencyBN, "LATENCYB", "LatencyB", "%g", 0, 255, 1, CAM84_LATENCYB);
     IUFillNumberVector(&LibftdilatencyBNP, LibftdilatencyBN, 1, getDeviceName(),"LATENCYB",
                        "LatencyB", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 
@@ -271,18 +310,25 @@ bool Cam84CCD::initProperties()
     IUFillNumberVector(&LibftditimerBNP, LibftditimerBN, 1, getDeviceName(),"TIMERB",
                        "TimerB", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 
+    /* Add property to set continous toggling of A/D to reduce noise */
+    IUFillSwitch(ContinuousADToggle,"ADTOGGLE", "AD_Continuous_Toggling", ISS_OFF);
+    IUFillSwitchVector(&ContinuousADToggleP, ContinuousADToggle, 1, getDeviceName(),"ADTOGGLE", "AD_Continuous_Toggling", MAIN_CONTROL_TAB, IP_RW, ISR_NOFMANY, 0, IPS_IDLE);
+
 
 
 
     // We set the CCD capabilities
-    uint32_t cap = CCD_CAN_ABORT | CCD_CAN_BIN | CCD_CAN_SUBFRAME | CCD_HAS_BAYER;
+    //MFT remove binning for now
+    uint32_t cap = CCD_CAN_ABORT /*| CCD_CAN_BIN */ | CCD_CAN_SUBFRAME | CCD_HAS_BAYER;
     SetCCDCapability(cap);
 
-    IUSaveText(&BayerT[2], "GRBG");    
+    IUSaveText(&BayerT[2], "GRBG");
     // Add Debug, Simulator, and Configuration controls
     addAuxControls();
+    addDebugControl();
 
     return true;
+
 
 }
 
@@ -304,21 +350,23 @@ bool Cam84CCD::updateProperties()
         SetTimer(POLLMS);
         defineNumber(&GainNP);
         defineNumber(&OffsetNP);
-        defineNumber(&BaudrateNP);
+        defineNumber(&BaudrateDivisorNP);
         defineNumber(&LibftditimerANP);
         defineNumber(&LibftdilatencyANP);
         defineNumber(&LibftditimerBNP);
         defineNumber(&LibftdilatencyBNP);
+        defineSwitch(&ContinuousADToggleP);
     }
     else
     {
         deleteProperty(GainNP.name);
         deleteProperty(OffsetNP.name);
-        deleteProperty(BaudrateNP.name);
+        deleteProperty(BaudrateDivisorNP.name);
         deleteProperty(LibftditimerANP.name);
         deleteProperty(LibftdilatencyANP.name);
         deleteProperty(LibftditimerBNP.name);
         deleteProperty(LibftdilatencyBNP.name);
+        deleteProperty(ContinuousADToggleP.name);
     }
 
     return true;
@@ -329,13 +377,13 @@ bool Cam84CCD::updateProperties()
 ***************************************************************************************/
 void Cam84CCD::setupParams()
 {
-    // Our CCD is an 8 bit CCD, 1280x1024 resolution, with 5.4um square pixels.
+    // Cam84 is an 16 bit CCD, 3000x200 resolution, with 7.8 um square pixels.
     SetCCDParams(3000, 2000, 16, 7.8, 7.8);
 
     // Let's calculate how much memory we need for the primary CCD buffer
     int nbuf;
     nbuf=PrimaryCCD.getXRes()*PrimaryCCD.getYRes() * PrimaryCCD.getBPP()/8;
-    nbuf+=512;                      //  leave a little extra at the end
+    nbuf+=512;                      //  leave a little extra at the end  WHY?
     PrimaryCCD.setFrameBufferSize(nbuf);
 }
 
@@ -351,7 +399,8 @@ bool Cam84CCD::StartExposure(float duration)
     // Since we have only have one CCD with one chip, we set the exposure duration of the primary CCD
     PrimaryCCD.setExposureDuration(duration);
     //cameraStartExposure(1,0,0,3000,2000, duration,true);
-    int r = cameraStartExposure(PrimaryCCD.getBinX(),PrimaryCCD.getSubX(),PrimaryCCD.getSubY(),PrimaryCCD.getSubW(),PrimaryCCD.getSubH(), duration, true);
+    int r = cameraStartExposure(PrimaryCCD.getBinX(),PrimaryCCD.getSubX(),PrimaryCCD.getSubY(),PrimaryCCD.getSubW(),
+                                PrimaryCCD.getSubH(), duration, PrimaryCCD.getFrameType());
     //int r = cameraStartExposure(1,0,0,3000,2000, 0.4, true);
     gettimeofday(&ExpStart,NULL);
 
@@ -471,7 +520,7 @@ void Cam84CCD::TimerHit()
 }
 
 /**************************************************************************************
-** Create a random image and return it to client
+** Get the image and return it to client
 ***************************************************************************************/
 void Cam84CCD::grabImage()
 {
@@ -479,75 +528,43 @@ void Cam84CCD::grabImage()
     uint8_t * image = PrimaryCCD.getFrameBuffer();
     int width = PrimaryCCD.getSubW() / PrimaryCCD.getBinX()   * (PrimaryCCD.getBPP() / 8);
     int height = PrimaryCCD.getSubH() / PrimaryCCD.getBinY();
-    //int width = PrimaryCCD.getSubW() / PrimaryCCD.getBinX() * (PrimaryCCD.getBPP() / 8);
-    //int height = PrimaryCCD.getSubH() / PrimaryCCD.getBinY() * (PrimaryCCD.getBPP() / 8);
 
+    uint8_t * imgbuff = cameraGetImagePointer();
 
     IDMessage(getDeviceName(), "grabimage width=%d height=%d BPP=%d\n", width/2, height, PrimaryCCD.getBPP() );
 
-   // Fill buffer with random pattern
-   while (!cameraGetImageReady() ); // waiting image
-   if (PrimaryCCD.getBinX()==1) 
+   // Fill buffer with image
+   while (!cameraGetImageReady() ) usleep(100000); // waiting image
+   if (PrimaryCCD.getBinX()==1)
    {
-   for (int j=PrimaryCCD.getSubY(); j < height + PrimaryCCD.getSubY(); j++)
-     for (int i=PrimaryCCD.getSubX(); i < (PrimaryCCD.getSubX()+width)/2; i++)
-         {
-            uint16_t pix = cameraGetImage(i,j);
-            uint8_t hibyte = (pix & 0xff00) >> 8;
-            uint8_t lobyte = (pix & 0xff);
-            image[2*i+  j*width] = hibyte;
-            image[2*i+1+j*width] = lobyte;
-         };
-   } 
-   else 
-   {
+//       int di = PrimaryCCD.getSubX();
+//       int dj = PrimaryCCD.getSubY();
    for (int j=0; j < height ; j++)
      for (int i=0; i < width/2; i++)
          {
-            uint16_t pix = cameraGetImage(2*i,2*j);
-            uint8_t hibyte = (pix & 0xff00) >> 8;
-            uint8_t lobyte = (pix & 0xff);
-            image[2*i+  j*width] = hibyte;
-            image[2*i+1+j*width] = lobyte;
+//            uint16_t pix = cameraGetImage(i+di,j+dj);
+//            uint8_t hibyte = (pix & 0xff00) >> 8;
+//            uint8_t lobyte = (pix & 0xff);
+//            image[2*i+  j*width] = hibyte;
+//            image[2*i+1+j*width] = lobyte;
+//            uint8_t * pix = (uint8_t *) & ( imgbuff[i+  j*width]);
+//            * pix = imgbuff[2*i+  j*width];
+//            * pix = cameraImage(i,j);  //remove start offsets from all image arrays
+            //Byte Swap!
+//            uint8_t temp = image[2*i+  j*width];
+             image[2*i  +j*width] = imgbuff[2*i+1+j*width];
+             image[2*i+1+j*width] = imgbuff[2*i  +j*width];
          };
-   }; 
+   }
+   else
+   {
+       IDMessage(getDeviceName(), "grabimage binning not currently supported, binsize requested is %d x %d\n", PrimaryCCD.getBinX(),PrimaryCCD.getBinY() );
+   };
 
-   /*for (int j=0; j < height ; j++)
-     for (int i=0; i < width; i++)
-         {
-            image[i+  j*width] = cameraGetImage(i,j)/256;
-         };*/
-   //cameraGetImage2(image);
-   //*bufim = (unsigned short *) image;
-   //image = *bufim;
-   //PrimaryCCD.setFrameBuffer(bufim);
-   //cameraGetImage(image);
-     IDMessage(getDeviceName(), "Download complete.");
+   IDMessage(getDeviceName(), "Download complete.");
 
    // Let INDI::CCD know we're done filling the image buffer
    ExposureComplete(&PrimaryCCD);
-}
+};
 
-
-
-/*
-
-int main(void)
-{
-    cameraConnect();
-    cameraSetBaudrate(80);
-    cameraSetOffset(0);
-    cameraSetGain(0);
-    int r = cameraStartExposure(1,0,0,3000,2000, 1, false);
-    while (!cameraGetImageReady())
-//        fprintf(stdout,"wait\n");
-      ; // waiting image
-    //for (int i=0; i < 10 ; i++)
-    //  for (int j=0; j < 10; j++)
-    //      fprintf(stdout,"img %d/%d:%d\n",i,j,cameraGetImage(i,j));
-    cameraDisconnect();
-
-}
-
-*/
 
